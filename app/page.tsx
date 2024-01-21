@@ -17,7 +17,7 @@ export default function Page() {
           <div className={styles.shape}></div>
           {/* <p className={`text-xl text-gray-800 md:text-3xl md:leading-normal`}> */}
           <p className={`${lusitana.className} text-xl text-gray-800 md:text-3xl md:leading-normal`}>
-            <strong>Welcome to Acme.</strong> This is a portfolio website {' '}
+            <strong>Welcome to InvestNest.</strong> This is a portfolio website {' '}
             <a href="https://nextjs.org/learn/" className="text-blue-500">
               which is built using Next.js
             </a>
