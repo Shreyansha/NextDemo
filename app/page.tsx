@@ -17,9 +17,9 @@ export default function Page() {
           <div className={styles.shape}></div>
           {/* <p className={`text-xl text-gray-800 md:text-3xl md:leading-normal`}> */}
           <p className={`${lusitana.className} text-xl text-gray-800 md:text-3xl md:leading-normal`}>
-            <strong>Welcome to RandiKhana.</strong> This is the website  for the{' '}
+            <strong>Welcome to Acme.</strong> This is a portfolio website {' '}
             <a href="https://nextjs.org/learn/" className="text-blue-500">
-              Dark Operation held by ISIS Leader
+              which is built using Next.js
             </a>
             , brought to you by Shreyansha.
           </p>
