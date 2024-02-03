@@ -10,6 +10,7 @@ export default async function CustomersTable({
   customers,
 }: {
   customers: FormattedCustomersTable[];
+ // customers: { total_pending: string; total_paid: string; id: string; name: string; email: string; image_url: string; total_invoices: number; }[];
 }) {
   return (
     <div className="w-full">
