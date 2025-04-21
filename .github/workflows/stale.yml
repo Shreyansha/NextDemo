@@ -1,0 +1,51 @@
+name: Mark stale issues, PRs, and delete stale branches
+
+on:
+  schedule:
+    - cron: '34 11 * * *'  # Daily at 11:34 UTC
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/stale@v5
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          stale-issue-message: 'Stale issue message'
+          stale-pr-message: 'Stale pull request message'
+          stale-issue-label: 'no-issue-activity'
+          stale-pr-label: 'no-pr-activity'
+
+  delete-stale-branches:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Install GitHub CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gh
+
+      - name: Authenticate with GitHub CLI
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Delete stale branches
+        run: |
+          gh repo view --json nameWithOwner -q .nameWithOwner > repo.txt
+          repo=$(cat repo.txt)
+          gh api repos/$repo/branches --paginate --jq '.[].name' | while read branch; do
+            if [[ "$branch" != "main" && "$branch" != "master" ]]; then
+              last_commit_date=$(gh api repos/$repo/commits/$branch -q '.commit.committer.date')
+              last_commit_timestamp=$(date -d "$last_commit_date" +%s)
+              thirty_days_ago=$(date -d '30 days ago' +%s)
+              if [ "$last_commit_timestamp" -lt "$thirty_days_ago" ]; then
+                echo "Deleting branch: $branch (last commit: $last_commit_date)"
+                gh api -X DELETE repos/$repo/git/refs/heads/$branch
+              fi
+            fi
+          done
