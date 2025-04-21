@@ -1,51 +1,54 @@
-name: Mark stale issues, PRs, and delete stale branches
+- name: Delete stale branches not linked to open or draft PRs
+  run: |
+    repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+    dry_run=true  # Set to false to actually delete
 
-on:
-  schedule:
-    - cron: '34 11 * * *'  # Daily at 11:34 UTC
+    log_file="deleted-branches.txt"
+    touch "$log_file"
 
-jobs:
-  stale:
-    runs-on: ubuntu-latest
-    permissions:
-      issues: write
-      pull-requests: write
+    echo "Fetching branches for $repo..."
 
-    steps:
-      - uses: actions/stale@v5
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          stale-issue-message: 'Stale issue message'
-          stale-pr-message: 'Stale pull request message'
-          stale-issue-label: 'no-issue-activity'
-          stale-pr-label: 'no-pr-activity'
+    gh api repos/$repo/branches --paginate --jq '.[].name' | while read branch; do
+      if [[ "$branch" == "main" || "$branch" == "master" ]]; then
+        echo "Skipping protected branch: $branch"
+        continue
+      fi
 
-  delete-stale-branches:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+      # Check for open or draft PRs from this branch
+      pr_data=$(gh api -X GET "repos/$repo/pulls?state=open&head=${repo##*/}:$branch")
+      pr_count=$(echo "$pr_data" | jq 'length')
+      draft_count=$(echo "$pr_data" | jq '[.[] | select(.draft == true)] | length')
 
-    steps:
-      - name: Install GitHub CLI
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gh
+      if [[ "$pr_count" -gt 0 || "$draft_count" -gt 0 ]]; then
+        echo "Skipping branch $branch — linked to open/draft PR(s)"
+        continue
+      fi
 
-      - name: Authenticate with GitHub CLI
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+      # Get last commit date and compare with threshold
+      last_commit_date=$(gh api repos/$repo/commits/$branch -q '.commit.committer.date')
+      last_commit_timestamp=$(date -d "$last_commit_date" +%s)
+      threshold=$(date -d '30 days ago' +%s)
 
-      - name: Delete stale branches
-        run: |
-          gh repo view --json nameWithOwner -q .nameWithOwner > repo.txt
-          repo=$(cat repo.txt)
-          gh api repos/$repo/branches --paginate --jq '.[].name' | while read branch; do
-            if [[ "$branch" != "main" && "$branch" != "master" ]]; then
-              last_commit_date=$(gh api repos/$repo/commits/$branch -q '.commit.committer.date')
-              last_commit_timestamp=$(date -d "$last_commit_date" +%s)
-              thirty_days_ago=$(date -d '30 days ago' +%s)
-              if [ "$last_commit_timestamp" -lt "$thirty_days_ago" ]; then
-                echo "Deleting branch: $branch (last commit: $last_commit_date)"
-                gh api -X DELETE repos/$repo/git/refs/heads/$branch
-              fi
-            fi
-          done
+      if [ "$last_commit_timestamp" -lt "$threshold" ]; then
+        echo "Stale branch detected: $branch (last commit: $last_commit_date)"
+        if [ "$dry_run" = true ]; then
+          echo "[Dry Run] Would delete: $branch" | tee -a "$log_file"
+        else
+          echo "Deleting branch: $branch" | tee -a "$log_file"
+          gh api -X DELETE repos/$repo/git/refs/heads/$branch
+        fi
+      else
+        echo "Branch $branch is not stale (last commit: $last_commit_date)"
+      fi
+    done
+
+    echo "Done. Deleted branches (dry-run=$dry_run) logged to $log_file"
+  env:
+    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+- name: Upload deletion log
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: deleted-branches-log
+    path: deleted-branches.txt
